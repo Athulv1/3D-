@@ -167,6 +167,18 @@ module WalkthroughControls
           sketchup.togglePlay();
         }
 
+        function setPlaying(val) {
+          playing = val;
+          var btn = document.getElementById('play-btn');
+          if (playing) {
+            btn.innerHTML = '&#9646;&#9646; PAUSE';
+            btn.classList.add('playing');
+          } else {
+            btn.innerHTML = '&#9654; PLAY';
+            btn.classList.remove('playing');
+          }
+        }
+
         function updateScene(name, index, total) {
           document.getElementById('scene-pill').textContent =
             name + '  \u2022  ' + index + ' / ' + total;
@@ -197,37 +209,76 @@ module WalkthroughControls
     @playing = false
 
     @dialog.add_action_callback("nextScene") { |_|
-      Sketchup.send_action("nextPage:")
-      update_scene_label
+      stop_playback
+      advance_scene(+1)
     }
 
     @dialog.add_action_callback("prevScene") { |_|
-      Sketchup.send_action("previousPage:")
-      update_scene_label
+      stop_playback
+      advance_scene(-1)
     }
 
     @dialog.add_action_callback("togglePlay") { |_|
-      @playing = !@playing
-      Sketchup.send_action("playpauseAnimation:")
+      if @playing
+        stop_playback
+      else
+        start_playback
+      end
     }
 
     @observer = WalkthroughPageObserver.new
     Sketchup.active_model.pages.add_observer(@observer)
 
     @dialog.set_on_closed {
+      stop_playback
       Sketchup.active_model.pages.remove_observer(@observer) rescue nil
-      @playing = false
     }
 
     @dialog.show
     update_scene_label
   end
 
+  def self.walkthrough_pages
+    Sketchup.active_model.pages.select { |p| p.name.start_with?("Walkthrough_") }
+  end
+
+  def self.advance_scene(dir)
+    pages = walkthrough_pages
+    return if pages.empty?
+    sel = Sketchup.active_model.pages.selected
+    idx = pages.index(sel) || 0
+    new_idx = (idx + dir) % pages.size
+    Sketchup.active_model.pages.selected = pages[new_idx]
+    update_scene_label
+  end
+
+  def self.start_playback
+    return if @playing
+    @playing = true
+    pages = walkthrough_pages
+    return unless pages.size > 0
+    # Use transition_time from first scene (default 0.3s), min 0.3s
+    interval = [pages.first.transition_time, 0.3].max
+    @timer_id = UI.start_timer(interval, true) do
+      if @playing
+        advance_scene(+1)
+      end
+    end
+    @dialog.execute_script("setPlaying(true)") rescue nil
+  end
+
+  def self.stop_playback
+    return unless @playing
+    @playing = false
+    UI.stop_timer(@timer_id) rescue nil
+    @timer_id = nil
+    @dialog.execute_script("setPlaying(false)") rescue nil
+  end
+
   def self.update_scene_label
     return unless @dialog && @dialog.visible?
-    model = Sketchup.active_model
-    pages = model.pages.select { |p| p.name.start_with?("Walkthrough_") }
-    sel   = model.pages.selected
+    pages = walkthrough_pages
+    sel   = Sketchup.active_model.pages.selected
     return unless sel && pages.include?(sel)
     idx = pages.index(sel)
     @dialog.execute_script(
