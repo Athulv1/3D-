@@ -1,5 +1,6 @@
 # create_walkthrough.rb
-# Reads walkthrough_waypoints.json and adds camera scenes to the current model.
+# Reads walkthrough_waypoints.json and adds smooth camera scenes to the current model.
+# Dense waypoints (25in spacing) + 0.3s transitions = smooth continuous video feel.
 # Auto-triggered by auto_runner.rb after build_floorplan.rb completes.
 
 require 'json'
@@ -16,17 +17,17 @@ _walkthrough = proc do
 
   data            = JSON.parse(File.read(json_path))
   waypoints       = data["waypoints"]       || []
-  transition_time = (data["transition_time"] || 2.0).to_f
-  delay_time      = (data["delay_time"]      || 0.5).to_f
+  transition_time = (data["transition_time"] || 0.3).to_f
+  delay_time      = (data["delay_time"]      || 0.0).to_f
 
   if waypoints.empty?
     UI.messagebox("No waypoints found in #{json_path}")
     next
   end
 
-  puts "Walkthrough: loading #{waypoints.size} waypoints from #{json_path}"
+  puts "Walkthrough: loading #{waypoints.size} waypoints..."
 
-  # Remove any previously generated walkthrough scenes
+  # Remove previously generated walkthrough scenes for clean rebuild
   to_delete = model.pages.select { |p| p.name.start_with?("Walkthrough_") }
   to_delete.each { |p| model.pages.erase(p) }
 
@@ -45,7 +46,8 @@ _walkthrough = proc do
         Geom::Point3d.new(target["x"], target["y"], target["z"]),
         Geom::Vector3d.new(up["x"],    up["y"],     up["z"])
       )
-      cam.fov = 60.0
+      cam.fov         = 75.0   # wide angle for immersive walkthrough
+      cam.perspective = true
 
       view.camera = cam
 
@@ -55,13 +57,34 @@ _walkthrough = proc do
       scene.transition_time = transition_time
       scene.delay_time      = delay_time
 
-      puts "  Scene #{i + 1}/#{waypoints.size}: #{scene_name}"
+      # Only save camera — hide all other scene properties to keep it clean
+      scene.use_hidden_layers    = false
+      scene.use_rendering_options = false
+      scene.use_shadow_info      = false
+      scene.use_style            = false
     end
 
     model.commit_operation
+
+    # Show the Scenes panel and Animation toolbar
+    Sketchup.send_action("showSceneManager:")
+
     model.save(model.path)
-    puts "Walkthrough: saved #{waypoints.size} scenes to #{model.path}"
-    UI.messagebox("Walkthrough ready!  #{waypoints.size} scenes created.\n\nPlay: View -> Animation -> Play")
+
+    total_time = (waypoints.size * transition_time).round(1)
+    puts "Walkthrough: #{waypoints.size} scenes, ~#{total_time}s total"
+
+    # Open the navigation control panel
+    WalkthroughControls.open_panel rescue nil
+
+    UI.messagebox(
+      "Walkthrough ready!\n\n" \
+      "  Scenes   : #{waypoints.size}\n" \
+      "  Duration : ~#{total_time} seconds\n\n" \
+      "Use the Walkthrough Controls panel to Play / Pause / Navigate.\n\n" \
+      "TO EXPORT AS VIDEO:\n" \
+      "  File -> Export -> Animation -> .mp4"
+    )
 
   rescue => e
     model.abort_operation

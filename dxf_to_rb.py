@@ -206,7 +206,7 @@ def floor_outline(outer_walls):
 # ── Walkthrough JSON generation ───────────────────────────────────────────
 
 def generate_walkthrough_json(floor_pts_mm, save_path,
-                               eye_height_in=66.0, inset_in=60.0, spacing_in=80.0):
+                               eye_height_in=66.0, inset_in=60.0, spacing_in=25.0):
     """
     Generates walkthrough_waypoints.json from the floor outline.
     Path = inset polygon ring, sampled every spacing_in inches.
@@ -246,8 +246,8 @@ def generate_walkthrough_json(floor_pts_mm, save_path,
         })
 
     data = {
-        "transition_time": 2.0,
-        "delay_time":      0.5,
+        "transition_time": 0.3,
+        "delay_time":      0.0,
         "waypoints":       waypoints,
     }
     Path(save_path).write_text(json.dumps(data, indent=2), encoding="utf-8")
