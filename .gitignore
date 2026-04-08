@@ -1,0 +1,20 @@
+# SketchUp generated files
+*.skp
+*.skb
+
+# Large archives
+*.zip
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Flask uploads
+uploads/
+
+# Assets folder (large SKP component files)
+Assets/
+
+# Trigger file (runtime only)
+run_trigger.txt
