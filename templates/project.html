@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ project.name }} — 3D Floor Plan Generator</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', sans-serif; background: #0a0b10; color: #e2e8f0; min-height: 100vh; }
+
+    .topbar {
+      background: rgba(15,16,23,0.95); border-bottom: 1px solid rgba(99,102,241,0.15);
+      padding: 16px 40px; display: flex; align-items: center; gap: 16px;
+      position: sticky; top: 0; z-index: 100; backdrop-filter: blur(20px);
+    }
+    .back-btn {
+      background: #1e2235; border: 1px solid #2d3148; color: #94a3b8;
+      padding: 8px 14px; border-radius: 8px; cursor: pointer;
+      font-size: 13px; text-decoration: none; transition: all 0.15s; font-family: inherit;
+    }
+    .back-btn:hover { background: #252a3d; color: #e2e8f0; }
+    .topbar h1 { font-size: 17px; font-weight: 700; }
+    .topbar .status-badge {
+      font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 16px;
+      background: rgba(99,102,241,0.12); color: #818cf8; margin-left: auto;
+    }
+
+    .container { max-width: 800px; margin: 0 auto; padding: 32px 24px 80px; }
+
+    /* Steps */
+    .step {
+      background: #12141e; border: 1px solid #1e2235; border-radius: 14px;
+      margin-bottom: 16px; overflow: hidden; transition: border-color 0.3s;
+    }
+    .step.active { border-color: rgba(99,102,241,0.4); }
+    .step.done   { border-color: rgba(34,197,94,0.25); }
+
+    .step-header {
+      padding: 20px 24px; display: flex; align-items: center; gap: 14px;
+      cursor: pointer; user-select: none;
+    }
+    .step-num {
+      width: 32px; height: 32px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; font-weight: 700; flex-shrink: 0;
+      background: #1e2235; color: #64748b; border: 2px solid #2d3148;
+      transition: all 0.3s;
+    }
+    .step.active .step-num { background: #6366f1; color: #fff; border-color: #6366f1; box-shadow: 0 0 16px rgba(99,102,241,0.3); }
+    .step.done .step-num   { background: #22c55e; color: #fff; border-color: #22c55e; }
+
+    .step-title { font-size: 15px; font-weight: 600; }
+    .step-subtitle { font-size: 12px; color: #64748b; margin-top: 2px; }
+    .step-check { margin-left: auto; font-size: 18px; color: #22c55e; display: none; }
+    .step.done .step-check { display: block; }
+
+    .step-body { padding: 0 24px 24px; display: none; }
+    .step.open .step-body { display: block; }
+
+    /* Upload zones */
+    .upload-zone {
+      border: 2px dashed #2d3148; border-radius: 12px;
+      padding: 36px 24px; text-align: center; cursor: pointer;
+      transition: all 0.2s; position: relative;
+    }
+    .upload-zone:hover, .upload-zone.dragover {
+      border-color: #6366f1; background: rgba(99,102,241,0.04);
+    }
+    .upload-zone input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+    .upload-zone .icon { font-size: 36px; margin-bottom: 10px; }
+    .upload-zone h3 { font-size: 14px; color: #cbd5e1; margin-bottom: 4px; }
+    .upload-zone p  { font-size: 12px; color: #475569; }
+    .upload-zone .filename { font-size: 13px; color: #6366f1; font-weight: 600; margin-top: 8px; display: none; }
+
+    /* Buttons */
+    .btn {
+      padding: 11px 20px; border-radius: 10px; font-size: 14px; font-weight: 600;
+      cursor: pointer; transition: all 0.2s; border: none; font-family: inherit;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #6366f1, #8b5cf6); color: #fff;
+      box-shadow: 0 4px 16px rgba(99,102,241,0.25);
+    }
+    .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 24px rgba(99,102,241,0.35); }
+    .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+    .btn-secondary { background: #1e2235; color: #94a3b8; border: 1px solid #2d3148; }
+    .btn-secondary:hover { background: #252a3d; }
+
+    /* Status messages */
+    .msg {
+      padding: 12px 16px; border-radius: 10px; font-size: 13px;
+      margin-top: 14px; display: none;
+    }
+    .msg.show { display: flex; align-items: center; gap: 8px; }
+    .msg.info    { background: rgba(99,102,241,0.1); border: 1px solid rgba(99,102,241,0.25); color: #a5b4fc; }
+    .msg.success { background: rgba(34,197,94,0.1);  border: 1px solid rgba(34,197,94,0.25);  color: #86efac; }
+    .msg.error   { background: rgba(239,68,68,0.1);  border: 1px solid rgba(239,68,68,0.25);  color: #fca5a5; }
+    .msg.loading { background: rgba(251,191,36,0.1); border: 1px solid rgba(251,191,36,0.2); color: #fde68a; }
+
+    /* Assets list */
+    .asset-grid {
+      display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px;
+    }
+    .asset-tag {
+      background: #1e2235; border: 1px solid #2d3148; border-radius: 8px;
+      padding: 6px 12px; font-size: 12px; color: #94a3b8;
+    }
+
+    /* Mapping table */
+    .map-table { width: 100%; border-collapse: separate; border-spacing: 0; margin-top: 14px; }
+    .map-table th {
+      text-align: left; font-size: 11px; font-weight: 600; color: #475569;
+      text-transform: uppercase; letter-spacing: 0.05em;
+      padding: 8px 12px; border-bottom: 1px solid #1e2235;
+    }
+    .map-table td { padding: 10px 12px; border-bottom: 1px solid #1a1d28; font-size: 13px; vertical-align: middle; }
+    .map-table tr:hover td { background: rgba(99,102,241,0.03); }
+
+    .map-table select {
+      background: #0f1117; border: 1px solid #2d3148; color: #e2e8f0;
+      padding: 7px 10px; border-radius: 8px; font-size: 12px; font-family: inherit;
+      width: 100%; outline: none;
+    }
+    .map-table select:focus { border-color: #6366f1; }
+    .map-table input[type="number"] {
+      background: #0f1117; border: 1px solid #2d3148; color: #e2e8f0;
+      padding: 7px 10px; border-radius: 8px; font-size: 12px; font-family: inherit;
+      width: 70px; text-align: center; outline: none;
+    }
+    .map-table input[type="number"]:focus { border-color: #6366f1; }
+
+    .match-auto   { color: #4ade80; font-size: 11px; font-weight: 600; }
+    .match-manual { color: #fbbf24; font-size: 11px; font-weight: 600; }
+    .match-none   { color: #64748b; font-size: 11px; }
+
+    /* Settings */
+    .settings-row {
+      display: flex; gap: 16px; margin-bottom: 14px;
+    }
+    .settings-field { flex: 1; }
+    .settings-field label { display: block; font-size: 12px; color: #64748b; margin-bottom: 6px; font-weight: 500; }
+    .settings-field input {
+      width: 100%; padding: 10px 12px; background: #0f1117;
+      border: 1px solid #2d3148; border-radius: 8px;
+      color: #e2e8f0; font-size: 13px; font-family: inherit; outline: none;
+    }
+    .settings-field input:focus { border-color: #6366f1; }
+
+    .btn-row { display: flex; gap: 10px; margin-top: 16px; }
+
+    .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.2); border-top-color: #fff; border-radius: 50%; animation: spin 0.6s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* DXF info */
+    .dxf-stats {
+      display: flex; gap: 20px; margin-top: 12px;
+    }
+    .dxf-stat {
+      background: #1e2235; border-radius: 10px; padding: 12px 16px; flex: 1; text-align: center;
+    }
+    .dxf-stat .val { font-size: 22px; font-weight: 800; color: #818cf8; }
+    .dxf-stat .lbl { font-size: 11px; color: #64748b; margin-top: 2px; }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <a href="/" class="back-btn">&larr; Projects</a>
+  <h1>{{ project.name }}</h1>
+  <span class="status-badge" id="statusBadge">{{ project.status | capitalize }}</span>
+</div>
+
+<div class="container">
+  <!-- STEP 1: Upload SKP -->
+  <div class="step {{ 'done' if project.extraction_done else ('active open' if not project.skp_uploaded else 'active open') }}" id="step1">
+    <div class="step-header" onclick="toggleStep('step1')">
+      <div class="step-num">1</div>
+      <div>
+        <div class="step-title">Upload SketchUp File</div>
+        <div class="step-subtitle">Upload a .skp file to extract fixture assets</div>
+      </div>
+      <span class="step-check">&#10003;</span>
+    </div>
+    <div class="step-body">
+      <div class="upload-zone" id="skpZone">
+        <input type="file" id="skpInput" accept=".skp">
+        <div class="icon">&#128230;</div>
+        <h3>Drop your .skp file here</h3>
+        <p>or click to browse</p>
+        <div class="filename" id="skpFilename"></div>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="skpUploadBtn" onclick="uploadSkp()" disabled>Upload &amp; Extract Fixtures</button>
+      </div>
+      <div class="msg" id="skpMsg"></div>
+      <div class="asset-grid" id="assetGrid"></div>
+    </div>
+  </div>
+
+  <!-- STEP 2: Upload DXF -->
+  <div class="step {{ 'done' if project.dxf_uploaded else '' }}" id="step2">
+    <div class="step-header" onclick="toggleStep('step2')">
+      <div class="step-num">2</div>
+      <div>
+        <div class="step-title">Upload DXF Floor Plan</div>
+        <div class="step-subtitle">Upload a .dxf file to read fixture positions</div>
+      </div>
+      <span class="step-check">&#10003;</span>
+    </div>
+    <div class="step-body">
+      <div class="upload-zone" id="dxfZone">
+        <input type="file" id="dxfInput" accept=".dxf,.dwg">
+        <div class="icon">&#128196;</div>
+        <h3>Drop your .dxf file here</h3>
+        <p>or click to browse</p>
+        <div class="filename" id="dxfFilename"></div>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="dxfUploadBtn" onclick="uploadDxf()" disabled>Upload &amp; Parse DXF</button>
+      </div>
+      <div class="msg" id="dxfMsg"></div>
+      <div class="dxf-stats" id="dxfStats" style="display:none"></div>
+    </div>
+  </div>
+
+  <!-- STEP 3: Fixture Mapping -->
+  <div class="step" id="step3">
+    <div class="step-header" onclick="toggleStep('step3')">
+      <div class="step-num">3</div>
+      <div>
+        <div class="step-title">Map Fixtures</div>
+        <div class="step-subtitle">Match DXF blocks to extracted SKP assets</div>
+      </div>
+      <span class="step-check">&#10003;</span>
+    </div>
+    <div class="step-body">
+      <div class="settings-row">
+        <div class="settings-field">
+          <label>Wall Height (mm)</label>
+          <input type="number" id="wallHeight" value="{{ project.wall_height }}">
+        </div>
+        <div class="settings-field">
+          <label>Wall Thickness (mm)</label>
+          <input type="number" id="wallThickness" value="{{ project.wall_thickness }}">
+        </div>
+        <div style="display:flex;align-items:flex-end">
+          <button class="btn btn-secondary" onclick="saveSettings()">Save</button>
+        </div>
+      </div>
+      <div id="mappingContainer"></div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="saveMappingBtn" onclick="saveMapping()">Save Mapping</button>
+      </div>
+      <div class="msg" id="mapMsg"></div>
+    </div>
+  </div>
+
+  <!-- STEP 4: Generate -->
+  <div class="step" id="step4">
+    <div class="step-header" onclick="toggleStep('step4')">
+      <div class="step-num">4</div>
+      <div>
+        <div class="step-title">Generate 3D Model</div>
+        <div class="step-subtitle">Build the floor plan in SketchUp</div>
+      </div>
+      <span class="step-check">&#10003;</span>
+    </div>
+    <div class="step-body">
+      <p style="font-size:13px;color:#94a3b8;margin-bottom:16px">
+        Make sure SketchUp is open with <strong>auto_runner.rb</strong> installed. The 3D model and walkthrough will be generated automatically.
+      </p>
+      <button class="btn btn-primary" id="generateBtn" onclick="generate()" style="width:100%;padding:16px;font-size:16px;">
+        &#9881; Generate 3D Floor Plan
+      </button>
+      <div class="msg" id="genMsg"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const PID = '{{ project.id }}';
+  let assets = [];
+  let blocks = [];
+  let currentMapping = {{ project.fixture_mapping | tojson }};
+
+  // ── Step toggling ──────────────────────────────────────────
+  function toggleStep(id) {
+    document.getElementById(id).classList.toggle('open');
+  }
+
+  // ── File upload handlers ───────────────────────────────────
+  function setupUpload(inputId, zoneId, filenameId, btnId) {
+    const input = document.getElementById(inputId);
+    const zone  = document.getElementById(zoneId);
+    const fname = document.getElementById(filenameId);
+    const btn   = document.getElementById(btnId);
+
+    input.addEventListener('change', () => {
+      if (input.files.length) {
+        fname.textContent = input.files[0].name;
+        fname.style.display = 'block';
+        btn.disabled = false;
+      }
+    });
+    zone.addEventListener('dragover',  e => { e.preventDefault(); zone.classList.add('dragover'); });
+    zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+    zone.addEventListener('drop', e => {
+      e.preventDefault(); zone.classList.remove('dragover');
+      input.files = e.dataTransfer.files;
+      input.dispatchEvent(new Event('change'));
+    });
+  }
+  setupUpload('skpInput', 'skpZone', 'skpFilename', 'skpUploadBtn');
+  setupUpload('dxfInput', 'dxfZone', 'dxfFilename', 'dxfUploadBtn');
+
+  // ── Messages ───────────────────────────────────────────────
+  function showMsg(id, type, html) {
+    const el = document.getElementById(id);
+    el.className = 'msg show ' + type;
+    el.innerHTML = html;
+  }
+
+  // ── SKP Upload ─────────────────────────────────────────────
+  async function uploadSkp() {
+    const input = document.getElementById('skpInput');
+    if (!input.files.length) return;
+
+    const btn = document.getElementById('skpUploadBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Uploading...';
+    showMsg('skpMsg', 'loading', '<span class="spinner"></span> Uploading SKP and starting extraction in SketchUp...');
+
+    const fd = new FormData();
+    fd.append('skp', input.files[0]);
+
+    try {
+      const res = await fetch(`/api/projects/${PID}/upload-skp`, { method: 'POST', body: fd });
+      const data = await res.json();
+      if (data.ok) {
+        showMsg('skpMsg', 'loading', '<span class="spinner"></span> Extraction in progress... SketchUp is extracting fixtures. This may take 10-30 seconds.');
+        pollExtraction();
+      } else {
+        showMsg('skpMsg', 'error', '&#10007; ' + data.error);
+        btn.disabled = false;
+        btn.textContent = 'Upload & Extract Fixtures';
+      }
+    } catch (err) {
+      showMsg('skpMsg', 'error', '&#10007; Network error: ' + err.message);
+      btn.disabled = false;
+      btn.textContent = 'Upload & Extract Fixtures';
+    }
+  }
+
+  function pollExtraction() {
+    const poll = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/projects/${PID}/extraction-status`);
+        const data = await res.json();
+        if (data.done) {
+          clearInterval(poll);
+          assets = data.assets;
+          showMsg('skpMsg', 'success', `&#10003; Extraction complete! ${assets.length} fixtures extracted.`);
+          renderAssets();
+          document.getElementById('step1').classList.add('done');
+          document.getElementById('step1').classList.remove('active');
+          document.getElementById('step2').classList.add('active', 'open');
+          document.getElementById('skpUploadBtn').textContent = 'Upload & Extract Fixtures';
+        }
+      } catch (e) {}
+    }, 2000);
+  }
+
+  function renderAssets() {
+    const grid = document.getElementById('assetGrid');
+    grid.innerHTML = assets.map(a => `<span class="asset-tag" title="${a.filename}">${a.name} (${a.instances}x)</span>`).join('');
+  }
+
+  // ── DXF Upload ─────────────────────────────────────────────
+  async function uploadDxf() {
+    const input = document.getElementById('dxfInput');
+    if (!input.files.length) return;
+
+    const btn = document.getElementById('dxfUploadBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Parsing...';
+    showMsg('dxfMsg', 'loading', '<span class="spinner"></span> Parsing DXF file...');
+
+    const fd = new FormData();
+    fd.append('dxf', input.files[0]);
+
+    try {
+      const res = await fetch(`/api/projects/${PID}/upload-dxf`, { method: 'POST', body: fd });
+      const data = await res.json();
+      if (data.ok) {
+        blocks = data.blocks;
+        showMsg('dxfMsg', 'success', `&#10003; DXF parsed! ${data.fixtures} fixtures, ${data.walls} walls.`);
+
+        // Show stats
+        const statsEl = document.getElementById('dxfStats');
+        statsEl.style.display = 'flex';
+        statsEl.innerHTML = `
+          <div class="dxf-stat"><div class="val">${data.walls}</div><div class="lbl">Walls</div></div>
+          <div class="dxf-stat"><div class="val">${data.fixtures}</div><div class="lbl">Fixtures</div></div>
+          <div class="dxf-stat"><div class="val">${data.blocks.length}</div><div class="lbl">Block Types</div></div>
+          <div class="dxf-stat"><div class="val">${Object.keys(data.auto_mapped).length}</div><div class="lbl">Auto-Mapped</div></div>
+        `;
+
+        // Update mapping state
+        currentMapping = { ...currentMapping, ...data.auto_mapped };
+
+        document.getElementById('step2').classList.add('done');
+        document.getElementById('step2').classList.remove('active');
+        document.getElementById('step3').classList.add('active', 'open');
+
+        // Load asset list if not loaded yet
+        if (assets.length === 0) await loadAssets();
+        renderMappingTable();
+      } else {
+        showMsg('dxfMsg', 'error', '&#10007; ' + data.error);
+      }
+    } catch (err) {
+      showMsg('dxfMsg', 'error', '&#10007; Network error: ' + err.message);
+    }
+    btn.disabled = false;
+    btn.textContent = 'Upload & Parse DXF';
+  }
+
+  async function loadAssets() {
+    try {
+      const res = await fetch(`/api/projects/${PID}`);
+      const data = await res.json();
+      if (data.ok) {
+        assets = data.project.assets || [];
+        blocks = data.project.dxf_blocks || [];
+        currentMapping = data.project.fixture_mapping || {};
+      }
+    } catch (e) {}
+  }
+
+  // ── Mapping Table ──────────────────────────────────────────
+  function renderMappingTable() {
+    const container = document.getElementById('mappingContainer');
+    if (blocks.length === 0) {
+      container.innerHTML = '<p style="color:#64748b;font-size:13px">Upload a DXF file first to see fixture blocks.</p>';
+      return;
+    }
+
+    const assetOptions = assets.map(a => `<option value="${a.filename}">${a.name}</option>`).join('');
+
+    let rows = '';
+    for (const blk of blocks) {
+      const entry = currentMapping[blk];
+      const matchedFile = entry ? entry.asset_file : '';
+      const rotation = entry ? (entry.rotation_offset || 0) : 0;
+      const isAuto = entry && !entry._manual;
+      const matchClass = entry ? (isAuto ? 'match-auto' : 'match-manual') : 'match-none';
+      const matchLabel = entry ? (isAuto ? '● Auto' : '● Manual') : '○ Unmatched';
+
+      rows += `<tr>
+        <td style="font-weight:600;color:#e2e8f0">${blk}</td>
+        <td><span class="${matchClass}">${matchLabel}</span></td>
+        <td>
+          <select id="map_${blk}" onchange="markManual('${blk}')">
+            <option value="">— None —</option>
+            ${assetOptions}
+          </select>
+        </td>
+        <td><input type="number" id="rot_${blk}" value="${rotation}" step="90"></td>
+      </tr>`;
+    }
+
+    container.innerHTML = `<table class="map-table">
+      <thead><tr><th>DXF Block</th><th>Match</th><th>Asset File</th><th>Rotation °</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+
+    // Set selected values
+    for (const blk of blocks) {
+      const entry = currentMapping[blk];
+      if (entry && entry.asset_file) {
+        const sel = document.getElementById('map_' + blk);
+        if (sel) sel.value = entry.asset_file;
+      }
+    }
+  }
+
+  function markManual(blk) {
+    const sel = document.getElementById('map_' + blk);
+    if (sel && sel.value) {
+      const asset = assets.find(a => a.filename === sel.value);
+      currentMapping[blk] = {
+        asset_file: sel.value,
+        rotation_offset: parseInt(document.getElementById('rot_' + blk).value) || 0,
+        local_center: asset ? [asset.local_center_x, asset.local_center_y] : [0, 0],
+        _manual: true,
+      };
+    }
+  }
+
+  async function saveMapping() {
+    // Collect from table
+    for (const blk of blocks) {
+      const sel = document.getElementById('map_' + blk);
+      const rot = document.getElementById('rot_' + blk);
+      if (sel && sel.value) {
+        const asset = assets.find(a => a.filename === sel.value);
+        currentMapping[blk] = {
+          asset_file: sel.value,
+          rotation_offset: parseInt(rot.value) || 0,
+          local_center: asset ? [asset.local_center_x, asset.local_center_y] : [0, 0],
+        };
+      } else {
+        delete currentMapping[blk];
+      }
+    }
+
+    try {
+      const res = await fetch(`/api/projects/${PID}/mapping`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mapping: currentMapping }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        showMsg('mapMsg', 'success', '&#10003; Mapping saved!');
+        document.getElementById('step3').classList.add('done');
+        document.getElementById('step4').classList.add('active', 'open');
+      } else {
+        showMsg('mapMsg', 'error', '&#10007; ' + data.error);
+      }
+    } catch (err) {
+      showMsg('mapMsg', 'error', '&#10007; ' + err.message);
+    }
+  }
+
+  async function saveSettings() {
+    const h = document.getElementById('wallHeight').value;
+    const t = document.getElementById('wallThickness').value;
+    await fetch(`/api/projects/${PID}/settings`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ wall_height: h, wall_thickness: t }),
+    });
+    showMsg('mapMsg', 'success', '&#10003; Settings saved.');
+    setTimeout(() => document.getElementById('mapMsg').classList.remove('show'), 2000);
+  }
+
+  // ── Generate ───────────────────────────────────────────────
+  async function generate() {
+    const btn = document.getElementById('generateBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Generating...';
+    showMsg('genMsg', 'loading', '<span class="spinner"></span> Generating 3D model and sending to SketchUp...');
+
+    try {
+      const res = await fetch(`/api/projects/${PID}/generate`, { method: 'POST' });
+      const data = await res.json();
+      if (data.ok) {
+        showMsg('genMsg', 'success',
+          `&#10003; ${data.message}<br>` +
+          `<small style="color:#94a3b8">Walls: ${data.details.walls} &bull; Fixtures: ${data.details.fixtures} &bull; Floor points: ${data.details.floor_points}</small>`
+        );
+        document.getElementById('step4').classList.add('done');
+        document.getElementById('statusBadge').textContent = 'Generated';
+      } else {
+        showMsg('genMsg', 'error', '&#10007; ' + data.error);
+      }
+    } catch (err) {
+      showMsg('genMsg', 'error', '&#10007; Network error: ' + err.message);
+    }
+    btn.disabled = false;
+    btn.innerHTML = '&#9881; Generate 3D Floor Plan';
+  }
+
+  // ── Init: load state ──────────────────────────────────────
+  (async function init() {
+    await loadAssets();
+    if (assets.length > 0) renderAssets();
+    if (blocks.length > 0 && assets.length > 0) renderMappingTable();
+
+    // Auto-open correct steps based on state
+    const s1 = document.getElementById('step1');
+    const s2 = document.getElementById('step2');
+    const s3 = document.getElementById('step3');
+    const s4 = document.getElementById('step4');
+
+    {% if project.extraction_done %}
+      s1.classList.add('done'); s1.classList.remove('active');
+      s2.classList.add('active', 'open');
+    {% endif %}
+    {% if project.dxf_uploaded %}
+      s2.classList.add('done'); s2.classList.remove('active');
+      s3.classList.add('active', 'open');
+    {% endif %}
+    {% if project.status == 'ready' or project.status == 'generated' %}
+      s3.classList.add('done'); s3.classList.remove('active');
+      s4.classList.add('active', 'open');
+    {% endif %}
+    {% if project.status == 'generated' %}
+      s4.classList.add('done');
+    {% endif %}
+
+    // If extraction in progress, start polling
+    {% if project.skp_uploaded and not project.extraction_done %}
+      showMsg('skpMsg', 'loading', '<span class="spinner"></span> Extraction in progress... waiting for SketchUp.');
+      pollExtraction();
+    {% endif %}
+  })();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3D Floor Plan Generator</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', 'Segoe UI', sans-serif;
+      background: #0a0b10;
+      color: #e2e8f0;
+      min-height: 100vh;
+    }
+
+    .topbar {
+      background: linear-gradient(180deg, rgba(15,16,23,0.95) 0%, rgba(10,11,16,0.98) 100%);
+      border-bottom: 1px solid rgba(99,102,241,0.15);
+      padding: 18px 40px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky; top: 0; z-index: 100;
+      backdrop-filter: blur(20px);
+    }
+
+    .logo { display: flex; align-items: center; gap: 14px; }
+
+    .logo-icon {
+      width: 42px; height: 42px;
+      background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+      border-radius: 11px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px;
+      box-shadow: 0 4px 20px rgba(99,102,241,0.3);
+    }
+
+    .logo h1 { font-size: 18px; font-weight: 700; color: #f1f5f9; letter-spacing: -0.3px; }
+    .logo p  { font-size: 12px; color: #64748b; margin-top: 1px; }
+
+    .btn-new {
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      color: #fff; border: none; border-radius: 10px;
+      padding: 11px 22px; font-size: 14px; font-weight: 600;
+      cursor: pointer; transition: all 0.2s;
+      display: flex; align-items: center; gap: 8px;
+      font-family: inherit;
+      box-shadow: 0 4px 16px rgba(99,102,241,0.25);
+    }
+    .btn-new:hover { transform: translateY(-1px); box-shadow: 0 6px 24px rgba(99,102,241,0.35); }
+
+    .container { max-width: 1100px; margin: 0 auto; padding: 40px 24px; }
+
+    .section-title {
+      font-size: 13px; font-weight: 600; color: #475569;
+      text-transform: uppercase; letter-spacing: 0.1em;
+      margin-bottom: 20px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 20px;
+    }
+
+    .card {
+      background: #12141e;
+      border: 1px solid #1e2235;
+      border-radius: 14px;
+      padding: 24px;
+      cursor: pointer;
+      transition: all 0.25s ease;
+      position: relative;
+      overflow: hidden;
+    }
+    .card::before {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0; height: 3px;
+      background: linear-gradient(90deg, #6366f1, #a855f7);
+      opacity: 0; transition: opacity 0.25s;
+    }
+    .card:hover {
+      border-color: rgba(99,102,241,0.3);
+      transform: translateY(-3px);
+      box-shadow: 0 12px 40px rgba(0,0,0,0.3);
+    }
+    .card:hover::before { opacity: 1; }
+
+    .card-name {
+      font-size: 16px; font-weight: 700; color: #f1f5f9;
+      margin-bottom: 6px;
+    }
+    .card-date { font-size: 12px; color: #475569; margin-bottom: 16px; }
+
+    .card-status {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 12px; font-weight: 600;
+      padding: 5px 12px; border-radius: 20px;
+    }
+    .card-status.created     { background: rgba(99,102,241,0.12); color: #818cf8; }
+    .card-status.extracting  { background: rgba(251,191,36,0.12); color: #fbbf24; }
+    .card-status.extracted   { background: rgba(34,197,94,0.12);  color: #4ade80; }
+    .card-status.mapping     { background: rgba(251,191,36,0.12); color: #fbbf24; }
+    .card-status.ready       { background: rgba(34,197,94,0.12);  color: #4ade80; }
+    .card-status.generated   { background: rgba(34,197,94,0.12);  color: #22c55e; }
+
+    .status-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: currentColor;
+    }
+    .card-status.extracting .status-dot { animation: pulse 1.5s infinite; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+    .card-meta {
+      display: flex; gap: 16px; margin-top: 14px;
+      font-size: 12px; color: #64748b;
+    }
+    .card-meta span { display: flex; align-items: center; gap: 4px; }
+
+    .card-delete {
+      position: absolute; top: 14px; right: 14px;
+      background: none; border: none; color: #475569;
+      cursor: pointer; font-size: 16px; padding: 4px 8px;
+      border-radius: 6px; transition: all 0.15s;
+      opacity: 0;
+    }
+    .card:hover .card-delete { opacity: 1; }
+    .card-delete:hover { background: rgba(239,68,68,0.15); color: #ef4444; }
+
+    .empty-state {
+      text-align: center; padding: 80px 20px;
+      color: #475569;
+    }
+    .empty-state .icon { font-size: 56px; margin-bottom: 16px; opacity: 0.5; }
+    .empty-state h3 { font-size: 18px; color: #64748b; margin-bottom: 8px; }
+    .empty-state p  { font-size: 14px; }
+
+    /* Modal */
+    .modal-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);
+      z-index: 200; align-items: center; justify-content: center;
+    }
+    .modal-overlay.active { display: flex; }
+
+    .modal {
+      background: #1a1d2e; border: 1px solid #2d3148;
+      border-radius: 16px; padding: 32px; width: 100%;
+      max-width: 420px; box-shadow: 0 24px 80px rgba(0,0,0,0.5);
+    }
+    .modal h2 { font-size: 18px; font-weight: 700; margin-bottom: 20px; }
+    .modal input {
+      width: 100%; padding: 12px 14px;
+      background: #0f1117; border: 1px solid #2d3148;
+      border-radius: 10px; color: #e2e8f0;
+      font-size: 14px; font-family: inherit;
+      outline: none; transition: border-color 0.2s;
+    }
+    .modal input:focus { border-color: #6366f1; }
+    .modal-actions {
+      display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;
+    }
+    .btn-cancel {
+      background: #1e2235; border: 1px solid #2d3148; color: #94a3b8;
+      padding: 10px 18px; border-radius: 10px; cursor: pointer;
+      font-size: 14px; font-family: inherit;
+    }
+    .btn-create {
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      border: none; color: #fff; padding: 10px 22px;
+      border-radius: 10px; cursor: pointer;
+      font-size: 14px; font-weight: 600; font-family: inherit;
+    }
+    .btn-cancel:hover { background: #252a3d; }
+    .btn-create:hover { opacity: 0.9; }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="logo">
+    <div class="logo-icon">&#127970;</div>
+    <div>
+      <h1>3D Floor Plan Generator</h1>
+      <p>DXF &rarr; SketchUp &middot; Universal</p>
+    </div>
+  </div>
+  <button class="btn-new" onclick="openModal()">
+    <span style="font-size:18px">+</span> New Project
+  </button>
+</div>
+
+<div class="container">
+  <div class="section-title">Your Projects</div>
+
+  {% if projects %}
+  <div class="grid">
+    {% for p in projects %}
+    <div class="card" onclick="location.href='/project/{{ p.id }}'">
+      <button class="card-delete" onclick="event.stopPropagation(); deleteProject('{{ p.id }}', '{{ p.name }}')" title="Delete project">&times;</button>
+      <div class="card-name">{{ p.name }}</div>
+      <div class="card-date">{{ p.created_at[:10] }}</div>
+      <div class="card-status {{ p.status }}">
+        <span class="status-dot"></span>
+        {{ p.status | capitalize }}
+      </div>
+      <div class="card-meta">
+        {% if p.skp_uploaded %}<span>&#128230; SKP uploaded</span>{% endif %}
+        {% if p.dxf_uploaded %}<span>&#128196; DXF uploaded</span>{% endif %}
+        {% if p.fixture_mapping %}<span>&#128295; {{ p.fixture_mapping | length }} mapped</span>{% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <div class="icon">&#128194;</div>
+    <h3>No projects yet</h3>
+    <p>Create your first project to get started</p>
+  </div>
+  {% endif %}
+</div>
+
+<div class="modal-overlay" id="modal">
+  <div class="modal">
+    <h2>New Project</h2>
+    <input type="text" id="projectName" placeholder="Project name (e.g., Samsung Store Mumbai)" autofocus>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+      <button class="btn-create" onclick="createProject()">Create Project</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  function openModal() {
+    document.getElementById('modal').classList.add('active');
+    document.getElementById('projectName').focus();
+  }
+  function closeModal() {
+    document.getElementById('modal').classList.remove('active');
+    document.getElementById('projectName').value = '';
+  }
+
+  document.getElementById('projectName').addEventListener('keydown', e => {
+    if (e.key === 'Enter') createProject();
+    if (e.key === 'Escape') closeModal();
+  });
+
+  async function createProject() {
+    const name = document.getElementById('projectName').value.trim();
+    if (!name) return;
+
+    try {
+      const res = await fetch('/api/projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        window.location.href = '/project/' + data.id;
+      } else {
+        alert(data.error);
+      }
+    } catch (err) {
+      alert('Error: ' + err.message);
+    }
+  }
+
+  async function deleteProject(id, name) {
+    if (!confirm('Delete project "' + name + '"? This cannot be undone.')) return;
+    try {
+      await fetch('/api/projects/' + id, { method: 'DELETE' });
+      location.reload();
+    } catch (err) {
+      alert('Error: ' + err.message);
+    }
+  }
+</script>
+
+</body>
+</html>

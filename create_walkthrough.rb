@@ -8,7 +8,14 @@ require 'json'
 _walkthrough = proc do
   model = Sketchup.active_model
 
-  json_path = File.join(File.dirname(model.path), "walkthrough_waypoints.json")
+  # Look for JSON next to this script (works in any project's output/ folder)
+  script_dir = File.dirname(File.expand_path(__FILE__))
+  json_path = File.join(script_dir, "walkthrough_waypoints.json")
+
+  # Fallback: try next to model if not found next to script
+  unless File.exist?(json_path)
+    json_path = File.join(File.dirname(model.path), "walkthrough_waypoints.json")
+  end
 
   unless File.exist?(json_path)
     UI.messagebox("Walkthrough JSON not found:\n#{json_path}")

@@ -16,5 +16,8 @@ uploads/
 # Assets folder (large SKP component files)
 Assets/
 
+# Project data (runtime)
+projects/
+
 # Trigger file (runtime only)
 run_trigger.txt

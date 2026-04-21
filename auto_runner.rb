@@ -10,7 +10,7 @@
 #   Then restart SketchUp.
 
 module AutoRunnerPlugin
-  TRIGGER = 'C:/Users/athul/Documents/3d_gen/run_trigger.txt'
+  TRIGGER = 'C:/Users/athul/Documents/3d/run_trigger.txt'
   WALKTHROUGH_DELAY = 8.0  # seconds to wait before running script2
 
   def self.run_script(path, label)
